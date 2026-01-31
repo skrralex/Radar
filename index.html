@@ -2,246 +2,240 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zenith Observer - Tactical</title>
+    <title>STRIL-60 | Tactical Station</title>
     <style>
-        html, body {
-            margin: 0; padding: 0;
-            width: 100%; height: 100%;
-            overflow: hidden;
-            background: #050b18; /* Deepest space blue */
-        }
-
-        #sky {
-            position: fixed;
-            inset: 0;
-            perspective: 2000px;
-            /* background is handled via JS dynamic styling for the cycle */
-            z-index: 1;
-            transition: background 1s ease-in-out;
-        }
-
-        #fs-toggle {
-            position: fixed; top: 20px; right: 20px;
-            z-index: 100;
-            background: rgba(255, 255, 255, 0.15);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 8px;
-            width: 44px; height: 44px;
-            cursor: pointer;
-            display: flex; align-items: center; justify-content: center;
-            backdrop-filter: blur(5px);
-        }
-
-        #fs-toggle svg { fill: white; width: 24px; height: 24px; }
-
-        .plane-container {
-            position: absolute;
-            width: 25px; height: 25px;
-            z-index: 5;
-            will-change: transform;
-        }
-
-        .silhouette {
-            fill: #000000;
-            width: 100%; height: 100%;
-            filter: blur(0.4px);
-        }
-
-        .cloud {
-            position: absolute;
-            background: white;
-            border-radius: 50%;
-            filter: blur(60px);
-            z-index: 10;
-            pointer-events: none;
-            will-change: transform, opacity;
-        }
-
-        /* Small prompt for the user */
-        #hint {
-            position: fixed; bottom: 10px; left: 10px;
-            color: rgba(255,255,255,0.3);
-            font-family: sans-serif; font-size: 10px;
-            z-index: 100; pointer-events: none;
-        }
+        body { margin: 0; background-color: #010000; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Courier New', monospace; }
+        #console-container { display: flex; align-items: center; gap: 60px; }
+        #monitor-wrap { position: relative; border: 35px solid #1a1a1a; border-radius: 50%; padding: 0; box-shadow: 0 0 100px #ff330015; width: 800px; height: 800px; background: #000; }
+        canvas { background-color: #030200; border-radius: 50%; filter: brightness(1.7) contrast(2.8) blur(0.5px); cursor: crosshair; }
+        #dial-container { text-align: center; color: #ff3300; letter-spacing: 2px; font-size: 10px; user-select: none; }
+        #knob { width: 80px; height: 80px; background: #111; border: 4px solid #331100; border-radius: 50%; position: relative; cursor: grab; margin-bottom: 10px; box-shadow: inset 0 0 15px #000, 0 5px 15px #000; }
+        #knob::after { content: ''; position: absolute; top: 10%; left: 50%; width: 4px; height: 30%; background: #ff3300; transform: translateX(-50%); border-radius: 2px; box-shadow: 0 0 8px #ff3300; }
+        .dial-label { margin-top: 10px; font-weight: bold; border-top: 1px solid #331100; padding-top: 5px; }
     </style>
 </head>
 <body>
 
-<div id="sky"></div>
-<div id="hint">PRESS 'N' TO SPAWN | 30S CYCLE</div>
-
-<button id="fs-toggle" title="Toggle Fullscreen">
-    <svg id="fs-icon" viewBox="0 0 24 24">
-        <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-    </svg>
-</button>
+    <div id="console-container">
+        <div id="monitor-wrap">
+            <canvas id="radarCanvas"></canvas>
+        </div>
+        <div id="dial-container">
+            <div id="knob"></div>
+            <div class="dial-label">MASTER GAIN</div>
+            <div id="gain-readout" style="color:#ffcc00; font-size:14px; margin-top:5px;">85%</div>
+        </div>
+    </div>
 
 <script>
-    const sky = document.getElementById('sky');
-    const fsToggle = document.getElementById('fs-toggle');
-    const fsIcon = document.getElementById('fs-icon');
-    let screenW = window.innerWidth;
-    let screenH = window.innerHeight;
+const canvas = document.getElementById('radarCanvas');
+const ctx = canvas.getContext('2d');
+const SIZE = 800;
+const CENTER = SIZE / 2;
+const RADIUS = SIZE * 0.48;
+const ORANGE = (alpha) => `rgba(255, 110, 0, ${alpha})`; 
 
-    const MODELS = [
-        { 
-            name: "Spitfire Mk.IX", 
-            path: "M258.637 61.0921C248.237 59.4921 205.97 60.4254 186.137 61.0921L187.137 28.5921C184.97 22.5921 179.937 9.19206 177.137 3.59206C174.337 -2.00794 171.637 1.25872 170.637 3.59206C167.47 11.0921 161.037 26.4921 160.637 28.0921L160.137 57.5921C160.304 58.9254 160.437 61.4921 159.637 61.0921C157.637 59.8921 120.804 61.5921 102.637 62.5921C82.6368 64.0921 37.5368 68.692 17.1368 75.092C-3.26316 81.4921 -0.696507 91.7587 3.13684 96.092C5.30349 98.592 12.5368 105.192 24.1368 111.592C35.7368 117.992 89.9702 131.259 115.637 137.092C123.804 137.259 142.637 137.992 152.637 139.592C162.637 141.192 165.137 165.592 165.137 177.592C166.637 198.259 169.337 239.492 168.137 239.092C166.937 238.692 153.304 241.592 146.637 243.092C138.304 246.425 122.337 254.892 125.137 262.092C128.637 271.092 139.137 271.592 143.137 273.592C147.137 275.592 165.137 276.092 166.637 275.592C167.837 275.192 170.137 269.425 171.137 266.592L178.637 266.592C179.304 269.425 181.337 275.092 184.137 275.092C191.737 276.692 209.637 271.759 217.637 269.092C219.97 267.759 224.337 264.092 223.137 260.092C221.637 255.092 222.137 253.592 212.137 246.592C204.137 240.992 186.47 239.259 178.637 239.092L182.137 172.092C183.47 161.259 187.737 139.592 194.137 139.592C235.737 141.192 295.137 120.592 319.637 110.092L346.137 92.5921L348.137 83.5921L334.137 71.0921C313.304 68.4254 269.037 62.6921 258.637 61.0921Z",
-            viewBox: "0 0 350 350",
-            speed: 0.0012,
-            scale: 1.6
-        },
-        { name: "C-17", path: "M50,5 L55,30 L98,45 L98,60 L55,55 L55,80 L75,95 L75,100 L50,92 L25,100 L25,95 L45,80 L45,55 L2,60 L2,45 L45,30 Z", viewBox: "0 0 100 100", speed: 0.0003, scale: 1.1 },
-        { name: "SR-71", path: "M50,2 L60,40 L65,95 L50,85 L35,95 L40,40 Z", viewBox: "0 0 100 100", speed: 0.0022, scale: 1.25 }, 
-        { name: "F-22", path: "M50,5 L75,60 L95,95 L50,85 L5,95 L25,60 Z", viewBox: "0 0 100 100", speed: 0.0018, scale: 0.82 }
-    ];
+canvas.width = SIZE;
+canvas.height = SIZE;
 
-    // --- Key Event for Manual Spawn ---
-    window.addEventListener('keydown', (e) => {
-        if (e.key.toLowerCase() === 'n') {
-            planes.push(new Plane());
+let angle = 0;
+let zoomLevel = 1.0, offsetX = 0, offsetY = 0, radarGain = 0.85;
+let rasterY = SIZE + 50, mapAlpha = 0;
+const planes = [];
+
+const swedenCoast = [
+    {x: 0.05, y: 0.50}, {x: 0.10, y: 0.60}, {x: 0.12, y: 0.75}, {x: 0.15, y: 0.85},
+    {x: 0.20, y: 0.95}, {x: 0.35, y: 0.98}, {x: 0.45, y: 0.90},
+    {x: 0.50, y: 0.80}, {x: 0.55, y: 0.65}, {x: 0.65, y: 0.40}, {x: 0.75, y: 0.20}
+];
+
+const fogPoints = [];
+for(let i=0; i<1500; i++) fogPoints.push({ x: Math.random()*2400-1200, y: Math.random()*2400-1200, s: Math.random()*4 });
+
+for (let i = 0; i < 5; i++) {
+    planes.push({
+        x: Math.random() * SIZE, y: Math.random() * SIZE,
+        vx: (Math.random()-0.5)*0.2, vy: (Math.random()-0.5)*0.2,
+        lastSeen: 0, isSelected: false, hookX: 0, hookY: 0, hookAlpha: 0, id: `TRK-${100 + i}`
+    });
+}
+
+const knob = document.getElementById('knob');
+let isDragging = false, currentDeg = 306; 
+knob.style.transform = `rotate(${currentDeg}deg)`;
+
+knob.addEventListener('mousedown', () => isDragging = true);
+window.addEventListener('mouseup', () => isDragging = false);
+window.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const rect = knob.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2, centerY = rect.top + rect.height / 2;
+    const angleRad = Math.atan2(e.clientY - centerY, e.clientX - centerX);
+    let newDeg = (angleRad * (180 / Math.PI)) + 90;
+    if (newDeg < 0) newDeg += 360;
+    let diff = newDeg - currentDeg;
+    if (Math.abs(diff) > 180) diff += (diff > 0 ? -360 : 360);
+    const potentialDeg = currentDeg + diff;
+    if (potentialDeg >= 0 && potentialDeg <= 360) {
+        currentDeg = potentialDeg;
+        knob.style.transform = `rotate(${currentDeg}deg)`;
+        radarGain = (currentDeg / 360);
+        document.getElementById('gain-readout').innerText = Math.round(radarGain * 100) + "%";
+    }
+});
+
+function getDist(x1, y1, x2, y2) { return Math.sqrt((x2-x1)**2 + (y2-y1)**2); }
+function getScreenPos(worldX, worldY) {
+    return { x: (worldX - CENTER + offsetX) * zoomLevel + CENTER, y: (worldY - CENTER + offsetY) * zoomLevel + CENTER };
+}
+
+canvas.addEventListener('mousedown', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    let found = false;
+    planes.forEach(p => {
+        const pos = getScreenPos(p.x, p.y);
+        if (getDist(pos.x, pos.y, CENTER, CENTER) < RADIUS && getDist(mx, my, pos.x, pos.y) < 30) {
+            planes.forEach(o => o.isSelected = false);
+            p.isSelected = true; p.hookAlpha = 1.0; found = true;
         }
     });
+    if (!found) planes.forEach(o => o.isSelected = false);
+});
 
-    // --- Day / Night Logic ---
-    let cycleTime = 0;
-    const cycleDuration = 30000; // 30 seconds
+window.addEventListener('wheel', (e) => { offsetX -= (e.deltaX / zoomLevel); offsetY -= (e.deltaY / zoomLevel); });
+window.addEventListener('keydown', (e) => {
+    const step = 40 / zoomLevel;
+    if (e.key === ".") zoomLevel *= 1.1;
+    if (e.key === "-" || e.key === ",") zoomLevel /= 1.1;
+    if (e.key === "ArrowUp") offsetY += step; if (e.key === "ArrowDown") offsetY -= step;
+    if (e.key === "ArrowLeft") offsetX += step; if (e.key === "ArrowRight") offsetX -= step;
+});
 
-    function updateAtmosphere(deltaTime) {
-        cycleTime = (cycleTime + deltaTime) % cycleDuration;
-        const progress = cycleTime / cycleDuration;
-        
-        // Use Sine to oscillate between Day and "Not-Quite-Dark" Night
-        // 0.5 is noon, 0 & 1 is midnight
-        const intensity = (Math.sin(progress * Math.PI * 2 - Math.PI / 2) + 1) / 2;
-        
-        // Background Interpolation
-        // Day: #7eb6f3 (lighter) | Night: #1e3c72 (darker)
-        const dayColor = { r: 126, g: 182, b: 243 };
-        const nightColor = { r: 30, g: 60, b: 114 };
-        
-        const r = Math.round(nightColor.r + (dayColor.r - nightColor.r) * intensity);
-        const g = Math.round(nightColor.g + (dayColor.g - nightColor.g) * intensity);
-        const b = Math.round(nightColor.b + (dayColor.b - nightColor.b) * intensity);
-        
-        sky.style.background = `radial-gradient(circle at 50% 50%, rgb(${r},${g},${b}) 0%, rgb(${r-20},${g-20},${b-20}) 100%)`;
+function draw() {
+    // --- NOISE FLICKER ENGINE ---
+    // Occasional power spikes (1 in 200 frames)
+    const powerSpike = Math.random() > 0.995 ? 0.4 : 0;
+    // Continuous micro-instability
+    const jitter = (Math.random() - 0.5) * 0.05;
+    const activeGain = Math.max(0, radarGain + jitter + powerSpike);
 
-        // Adjust Cloud Opacity (dimmer at night)
-        const cloudOpacity = 0.1 + (intensity * 0.25);
-        document.querySelectorAll('.cloud').forEach(c => c.style.opacity = cloudOpacity);
+    ctx.fillStyle = `rgba(0, 0, 0, ${0.15 - (powerSpike/4)})`; 
+    ctx.fillRect(0, 0, SIZE, SIZE);
+
+    const station = getScreenPos(CENTER, CENTER);
+    const lastAngle = angle;
+    angle += 0.022;
+
+    if (((lastAngle + Math.PI/2) % (Math.PI * 2)) > ((angle + Math.PI/2) % (Math.PI * 2))) {
+        rasterY = 0; mapAlpha = 1.0;
     }
 
-    // --- Fullscreen & Resize ---
-    fsToggle.addEventListener('click', () => {
-        if (!document.fullscreenElement) document.documentElement.requestFullscreen();
-        else document.exitFullscreen();
-    });
-
-    document.addEventListener('fullscreenchange', () => {
-        if (document.fullscreenElement) fsIcon.innerHTML = '<path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>';
-        else fsIcon.innerHTML = '<path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>';
-    });
-
-    window.addEventListener('resize', () => {
-        screenW = window.innerWidth;
-        screenH = window.innerHeight;
-    });
-
-    class Plane {
-        constructor() {
-            this.model = MODELS[Math.floor(Math.random() * MODELS.length)];
-            this.progress = 0;
-            this.speed = this.model.speed + (Math.random() * 0.0003);
-            const pad = 300;
-            this.p0 = this.getEdgePos(pad);
-            this.p1 = { x: Math.random() * screenW, y: Math.random() * screenH };
-            this.p2 = this.getEdgePos(pad);
-            this.lastHeading = null;
-            this.currentRoll = 0;
-            this.container = document.createElement('div');
-            this.container.className = 'plane-container';
-            this.container.innerHTML = `<svg class="silhouette" viewBox="${this.model.viewBox}"><path d="${this.model.path}" /></svg>`;
-            this.sprite = this.container.querySelector('.silhouette');
-            sky.appendChild(this.container);
-        }
-
-        getEdgePos(pad) {
-            const side = Math.floor(Math.random() * 4);
-            if (side === 0) return { x: Math.random() * screenW, y: -pad };
-            if (side === 1) return { x: screenW + pad, y: Math.random() * screenH };
-            if (side === 2) return { x: Math.random() * screenW, y: screenH + pad };
-            return { x: -pad, y: Math.random() * screenH };
-        }
-
-        update() {
-            this.progress += this.speed;
-            if (this.progress >= 1) { this.container.remove(); return false; }
-            const t = this.progress;
-            const x = (1-t)**2 * this.p0.x + 2*(1-t)*t * this.p1.x + t**2 * this.p2.x;
-            const y = (1-t)**2 * this.p0.y + 2*(1-t)*t * this.p1.y + t**2 * this.p2.y;
-            const nextT = t + 0.005;
-            const nx = (1-nextT)**2 * this.p0.x + 2*(1-nextT)*nextT * this.p1.x + nextT**2 * this.p2.x;
-            const ny = (1-nextT)**2 * this.p0.y + 2*(1-nextT)*nextT * this.p1.y + nextT**2 * this.p2.y;
-            const heading = (Math.atan2(ny - y, nx - x) * 180 / Math.PI) + 90;
-
-            if (this.lastHeading !== null) {
-                let diff = heading - this.lastHeading;
-                if (diff > 180) diff -= 360;
-                if (diff < -180) diff += 360;
-                const targetRoll = diff * 40; 
-                this.currentRoll += (targetRoll - this.currentRoll) * 0.1;
+    // DRAW MAP
+    if (mapAlpha > 0.01) {
+        ctx.lineWidth = 2.5;
+        swedenCoast.forEach((p, i) => {
+            const pos = getScreenPos(p.x * SIZE, p.y * SIZE);
+            if (pos.y < rasterY || rasterY >= SIZE) {
+                ctx.strokeStyle = ORANGE(mapAlpha * (0.4 + powerSpike));
+                ctx.beginPath();
+                const prev = swedenCoast[i-1];
+                if (prev) {
+                    const prevPos = getScreenPos(prev.x * SIZE, prev.y * SIZE);
+                    ctx.moveTo(prevPos.x, prevPos.y); ctx.lineTo(pos.x, pos.y); ctx.stroke();
+                }
             }
-            this.lastHeading = heading;
-            const pitch = (t - 0.5) * 50;
-            this.container.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${heading}deg) scale(${this.model.scale})`;
-            this.sprite.style.transform = `rotateX(${pitch}deg) rotateZ(${this.currentRoll}deg)`;
-            return true;
+        });
+        mapAlpha *= 0.975; 
+    }
+
+    // RASTER GLOW TRAIL
+    if (rasterY < SIZE) {
+        ctx.shadowBlur = 20 + (powerSpike * 50);
+        ctx.shadowColor = ORANGE(1);
+        ctx.strokeStyle = ORANGE(0.8 + powerSpike);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(CENTER - RADIUS, rasterY); ctx.lineTo(CENTER + RADIUS, rasterY);
+        ctx.stroke();
+        
+        let grad = ctx.createLinearGradient(0, rasterY - 60, 0, rasterY);
+        grad.addColorStop(0, ORANGE(0));
+        grad.addColorStop(1, ORANGE(0.25 + powerSpike/2));
+        ctx.fillStyle = grad;
+        ctx.fillRect(CENTER - RADIUS, rasterY - 60, RADIUS * 2, 60);
+
+        rasterY += 140; ctx.shadowBlur = 0;
+    }
+
+    // NOISE / CLUTTER
+    ctx.fillStyle = ORANGE(0.85 * activeGain);
+    const clutterDensity = 2000 * activeGain;
+    for (let i = 0; i < clutterDensity; i++) {
+        const d = Math.pow(Math.random(), 2.1) * (550 * zoomLevel);
+        const a = Math.random() * Math.PI * 2;
+        const nx = station.x + d * Math.cos(a), ny = station.y + d * Math.sin(a);
+        if (getDist(nx, ny, CENTER, CENTER) < RADIUS && d > 12 * zoomLevel) {
+            ctx.fillRect(nx, ny, 1 + Math.random() * 2, 1 + Math.random() * 2);
         }
     }
 
-    class Cloud {
-        constructor() {
-            this.el = document.createElement('div');
-            this.el.className = 'cloud';
-            this.reset(true);
-            sky.appendChild(this.el);
+    // BEAM
+    ctx.save();
+    ctx.shadowBlur = 25 + (powerSpike * 40);
+    ctx.globalAlpha = 0.6 + powerSpike;
+    ctx.shadowColor = ORANGE(1.0);
+    ctx.strokeStyle = ORANGE(1.0);
+    ctx.lineWidth = 6;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(station.x, station.y);
+    ctx.lineTo(station.x + Math.cos(angle) * (SIZE * 5), station.y + Math.sin(angle) * (SIZE * 5));
+    ctx.stroke();
+    ctx.restore();
+
+    planes.forEach(p => {
+        p.x += p.vx; p.y += p.vy;
+        const pos = getScreenPos(p.x, p.y);
+        const distToRadar = getDist(pos.x, pos.y, station.x, station.y);
+        if (getDist(pos.x, pos.y, CENTER, CENTER) < RADIUS) {
+            const pAngle = Math.atan2(pos.y - station.y, pos.x - station.x);
+            const sweepA = angle % (Math.PI * 2);
+            if (Math.abs(sweepA - pAngle) < 0.06) {
+                p.lastSeen = 1.0;
+                if (p.isSelected) { p.hookX = pos.x; p.hookY = pos.y; p.hookAlpha = 1.0; }
+            }
+            if (p.lastSeen > 0) {
+                const signalStrength = Math.max(0.0, 1.0 - (distToRadar / (RADIUS * 0.9)));
+                if (signalStrength > 0.05) {
+                    ctx.save();
+                    ctx.shadowBlur = 15 * signalStrength; ctx.shadowColor = ORANGE(1.0);
+                    ctx.fillStyle = ORANGE(p.lastSeen * activeGain * 1.5 * signalStrength);
+                    ctx.beginPath(); ctx.arc(pos.x, pos.y, 3 * signalStrength + 1, 0, Math.PI * 2); ctx.fill();
+                    ctx.restore();
+                }
+                p.lastSeen -= 0.005;
+            }
         }
-        reset(initial = false) {
-            const size = 300 + Math.random() * 600;
-            this.x = initial ? Math.random() * screenW : screenW + 500;
-            this.y = Math.random() * screenH;
-            this.speed = 0.1 + Math.random() * 0.3;
-            this.el.style.width = size + 'px';
-            this.el.style.height = (size * 0.4) + 'px';
+        if (p.isSelected && p.hookAlpha > 0) {
+            ctx.save();
+            ctx.strokeStyle = ORANGE(p.hookAlpha + (powerSpike * 0.5));
+            ctx.lineWidth = 1;
+            const s = 16;
+            ctx.beginPath();
+            ctx.moveTo(p.hookX, p.hookY - s); ctx.lineTo(p.hookX + s, p.hookY + s*0.7); ctx.lineTo(p.hookX - s, p.hookY + s*0.7);
+            ctx.closePath(); ctx.stroke();
+            ctx.restore();
+            p.hookAlpha -= 0.002;
         }
-        update() {
-            this.x -= this.speed;
-            if (this.x < -800) this.x = screenW + 800;
-            this.el.style.transform = `translate(${this.x}px, ${this.y}px)`;
-        }
-    }
+    });
 
-    let planes = [];
-    let clouds = Array.from({length: 10}, () => new Cloud());
-    let lastTime = 0;
-
-    function loop(timestamp) {
-        const deltaTime = timestamp - lastTime || 0;
-        lastTime = timestamp;
-
-        updateAtmosphere(deltaTime);
-
-        if (Math.random() < 0.006 && planes.length < 4) {
-            planes.push(new Plane());
-        }
-        planes = planes.filter(p => p.update());
-        clouds.forEach(c => c.update());
-        requestAnimationFrame(loop);
-    }
-
-    requestAnimationFrame(loop);
+    // MASK
+    ctx.strokeStyle = '#010000'; ctx.lineWidth = 250;
+    ctx.beginPath(); ctx.arc(CENTER, CENTER, RADIUS + 125, 0, Math.PI * 2); ctx.stroke();
+    requestAnimationFrame(draw);
+}
+draw();
 </script>
 </body>
 </html>
