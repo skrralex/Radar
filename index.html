@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zenith Observer - Tactical</title>
+    <style>
+        html, body {
+            margin: 0; padding: 0;
+            width: 100%; height: 100%;
+            overflow: hidden;
+            background: #050b18; /* Deepest space blue */
+        }
+
+        #sky {
+            position: fixed;
+            inset: 0;
+            perspective: 2000px;
+            /* background is handled via JS dynamic styling for the cycle */
+            z-index: 1;
+            transition: background 1s ease-in-out;
+        }
+
+        #fs-toggle {
+            position: fixed; top: 20px; right: 20px;
+            z-index: 100;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            width: 44px; height: 44px;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            backdrop-filter: blur(5px);
+        }
+
+        #fs-toggle svg { fill: white; width: 24px; height: 24px; }
+
+        .plane-container {
+            position: absolute;
+            width: 25px; height: 25px;
+            z-index: 5;
+            will-change: transform;
+        }
+
+        .silhouette {
+            fill: #000000;
+            width: 100%; height: 100%;
+            filter: blur(0.4px);
+        }
+
+        .cloud {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            filter: blur(60px);
+            z-index: 10;
+            pointer-events: none;
+            will-change: transform, opacity;
+        }
+
+        /* Small prompt for the user */
+        #hint {
+            position: fixed; bottom: 10px; left: 10px;
+            color: rgba(255,255,255,0.3);
+            font-family: sans-serif; font-size: 10px;
+            z-index: 100; pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="sky"></div>
+<div id="hint">PRESS 'N' TO SPAWN | 30S CYCLE</div>
+
+<button id="fs-toggle" title="Toggle Fullscreen">
+    <svg id="fs-icon" viewBox="0 0 24 24">
+        <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+    </svg>
+</button>
+
+<script>
+    const sky = document.getElementById('sky');
+    const fsToggle = document.getElementById('fs-toggle');
+    const fsIcon = document.getElementById('fs-icon');
+    let screenW = window.innerWidth;
+    let screenH = window.innerHeight;
+
+    const MODELS = [
+        { 
+            name: "Spitfire Mk.IX", 
+            path: "M258.637 61.0921C248.237 59.4921 205.97 60.4254 186.137 61.0921L187.137 28.5921C184.97 22.5921 179.937 9.19206 177.137 3.59206C174.337 -2.00794 171.637 1.25872 170.637 3.59206C167.47 11.0921 161.037 26.4921 160.637 28.0921L160.137 57.5921C160.304 58.9254 160.437 61.4921 159.637 61.0921C157.637 59.8921 120.804 61.5921 102.637 62.5921C82.6368 64.0921 37.5368 68.692 17.1368 75.092C-3.26316 81.4921 -0.696507 91.7587 3.13684 96.092C5.30349 98.592 12.5368 105.192 24.1368 111.592C35.7368 117.992 89.9702 131.259 115.637 137.092C123.804 137.259 142.637 137.992 152.637 139.592C162.637 141.192 165.137 165.592 165.137 177.592C166.637 198.259 169.337 239.492 168.137 239.092C166.937 238.692 153.304 241.592 146.637 243.092C138.304 246.425 122.337 254.892 125.137 262.092C128.637 271.092 139.137 271.592 143.137 273.592C147.137 275.592 165.137 276.092 166.637 275.592C167.837 275.192 170.137 269.425 171.137 266.592L178.637 266.592C179.304 269.425 181.337 275.092 184.137 275.092C191.737 276.692 209.637 271.759 217.637 269.092C219.97 267.759 224.337 264.092 223.137 260.092C221.637 255.092 222.137 253.592 212.137 246.592C204.137 240.992 186.47 239.259 178.637 239.092L182.137 172.092C183.47 161.259 187.737 139.592 194.137 139.592C235.737 141.192 295.137 120.592 319.637 110.092L346.137 92.5921L348.137 83.5921L334.137 71.0921C313.304 68.4254 269.037 62.6921 258.637 61.0921Z",
+            viewBox: "0 0 350 350",
+            speed: 0.0012,
+            scale: 1.6
+        },
+        { name: "C-17", path: "M50,5 L55,30 L98,45 L98,60 L55,55 L55,80 L75,95 L75,100 L50,92 L25,100 L25,95 L45,80 L45,55 L2,60 L2,45 L45,30 Z", viewBox: "0 0 100 100", speed: 0.0003, scale: 1.1 },
+        { name: "SR-71", path: "M50,2 L60,40 L65,95 L50,85 L35,95 L40,40 Z", viewBox: "0 0 100 100", speed: 0.0022, scale: 1.25 }, 
+        { name: "F-22", path: "M50,5 L75,60 L95,95 L50,85 L5,95 L25,60 Z", viewBox: "0 0 100 100", speed: 0.0018, scale: 0.82 }
+    ];
+
+    // --- Key Event for Manual Spawn ---
+    window.addEventListener('keydown', (e) => {
+        if (e.key.toLowerCase() === 'n') {
+            planes.push(new Plane());
+        }
+    });
+
+    // --- Day / Night Logic ---
+    let cycleTime = 0;
+    const cycleDuration = 30000; // 30 seconds
+
+    function updateAtmosphere(deltaTime) {
+        cycleTime = (cycleTime + deltaTime) % cycleDuration;
+        const progress = cycleTime / cycleDuration;
+        
+        // Use Sine to oscillate between Day and "Not-Quite-Dark" Night
+        // 0.5 is noon, 0 & 1 is midnight
+        const intensity = (Math.sin(progress * Math.PI * 2 - Math.PI / 2) + 1) / 2;
+        
+        // Background Interpolation
+        // Day: #7eb6f3 (lighter) | Night: #1e3c72 (darker)
+        const dayColor = { r: 126, g: 182, b: 243 };
+        const nightColor = { r: 30, g: 60, b: 114 };
+        
+        const r = Math.round(nightColor.r + (dayColor.r - nightColor.r) * intensity);
+        const g = Math.round(nightColor.g + (dayColor.g - nightColor.g) * intensity);
+        const b = Math.round(nightColor.b + (dayColor.b - nightColor.b) * intensity);
+        
+        sky.style.background = `radial-gradient(circle at 50% 50%, rgb(${r},${g},${b}) 0%, rgb(${r-20},${g-20},${b-20}) 100%)`;
+
+        // Adjust Cloud Opacity (dimmer at night)
+        const cloudOpacity = 0.1 + (intensity * 0.25);
+        document.querySelectorAll('.cloud').forEach(c => c.style.opacity = cloudOpacity);
+    }
+
+    // --- Fullscreen & Resize ---
+    fsToggle.addEventListener('click', () => {
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+        else document.exitFullscreen();
+    });
+
+    document.addEventListener('fullscreenchange', () => {
+        if (document.fullscreenElement) fsIcon.innerHTML = '<path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>';
+        else fsIcon.innerHTML = '<path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>';
+    });
+
+    window.addEventListener('resize', () => {
+        screenW = window.innerWidth;
+        screenH = window.innerHeight;
+    });
+
+    class Plane {
+        constructor() {
+            this.model = MODELS[Math.floor(Math.random() * MODELS.length)];
+            this.progress = 0;
+            this.speed = this.model.speed + (Math.random() * 0.0003);
+            const pad = 300;
+            this.p0 = this.getEdgePos(pad);
+            this.p1 = { x: Math.random() * screenW, y: Math.random() * screenH };
+            this.p2 = this.getEdgePos(pad);
+            this.lastHeading = null;
+            this.currentRoll = 0;
+            this.container = document.createElement('div');
+            this.container.className = 'plane-container';
+            this.container.innerHTML = `<svg class="silhouette" viewBox="${this.model.viewBox}"><path d="${this.model.path}" /></svg>`;
+            this.sprite = this.container.querySelector('.silhouette');
+            sky.appendChild(this.container);
+        }
+
+        getEdgePos(pad) {
+            const side = Math.floor(Math.random() * 4);
+            if (side === 0) return { x: Math.random() * screenW, y: -pad };
+            if (side === 1) return { x: screenW + pad, y: Math.random() * screenH };
+            if (side === 2) return { x: Math.random() * screenW, y: screenH + pad };
+            return { x: -pad, y: Math.random() * screenH };
+        }
+
+        update() {
+            this.progress += this.speed;
+            if (this.progress >= 1) { this.container.remove(); return false; }
+            const t = this.progress;
+            const x = (1-t)**2 * this.p0.x + 2*(1-t)*t * this.p1.x + t**2 * this.p2.x;
+            const y = (1-t)**2 * this.p0.y + 2*(1-t)*t * this.p1.y + t**2 * this.p2.y;
+            const nextT = t + 0.005;
+            const nx = (1-nextT)**2 * this.p0.x + 2*(1-nextT)*nextT * this.p1.x + nextT**2 * this.p2.x;
+            const ny = (1-nextT)**2 * this.p0.y + 2*(1-nextT)*nextT * this.p1.y + nextT**2 * this.p2.y;
+            const heading = (Math.atan2(ny - y, nx - x) * 180 / Math.PI) + 90;
+
+            if (this.lastHeading !== null) {
+                let diff = heading - this.lastHeading;
+                if (diff > 180) diff -= 360;
+                if (diff < -180) diff += 360;
+                const targetRoll = diff * 40; 
+                this.currentRoll += (targetRoll - this.currentRoll) * 0.1;
+            }
+            this.lastHeading = heading;
+            const pitch = (t - 0.5) * 50;
+            this.container.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${heading}deg) scale(${this.model.scale})`;
+            this.sprite.style.transform = `rotateX(${pitch}deg) rotateZ(${this.currentRoll}deg)`;
+            return true;
+        }
+    }
+
+    class Cloud {
+        constructor() {
+            this.el = document.createElement('div');
+            this.el.className = 'cloud';
+            this.reset(true);
+            sky.appendChild(this.el);
+        }
+        reset(initial = false) {
+            const size = 300 + Math.random() * 600;
+            this.x = initial ? Math.random() * screenW : screenW + 500;
+            this.y = Math.random() * screenH;
+            this.speed = 0.1 + Math.random() * 0.3;
+            this.el.style.width = size + 'px';
+            this.el.style.height = (size * 0.4) + 'px';
+        }
+        update() {
+            this.x -= this.speed;
+            if (this.x < -800) this.x = screenW + 800;
+            this.el.style.transform = `translate(${this.x}px, ${this.y}px)`;
+        }
+    }
+
+    let planes = [];
+    let clouds = Array.from({length: 10}, () => new Cloud());
+    let lastTime = 0;
+
+    function loop(timestamp) {
+        const deltaTime = timestamp - lastTime || 0;
+        lastTime = timestamp;
+
+        updateAtmosphere(deltaTime);
+
+        if (Math.random() < 0.006 && planes.length < 4) {
+            planes.push(new Plane());
+        }
+        planes = planes.filter(p => p.update());
+        clouds.forEach(c => c.update());
+        requestAnimationFrame(loop);
+    }
+
+    requestAnimationFrame(loop);
+</script>
+</body>
+</html>
